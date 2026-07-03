@@ -92,6 +92,12 @@ def gather_files_to_move(config):
 
                 if os.path.getsize(file_path) == 0:
                     continue
+
+                if config['Settings'].get('SKIP_HARDLINKED_FILES', False):
+                    if os.stat(file_path).st_nlink > 1:
+                        logging.debug(f"Skipping hardlinked file (nlink > 1): {file_path}")
+                        continue
+
                 files_to_move.append(file_path)
             except (OSError, IOError) as e:
                 logging.warning(f"Error accessing file {file_path}: {e}")

@@ -1,3 +1,6 @@
+### v1.4.3 - 2026-07-03
+- Added `SKIP_HARDLINKED_FILES` option to skip files with a link count greater than 1. [Issue #75](https://github.com/monstermuffin/mergerfs-cache-mover/issues/75).
+
 ### v1.4.2 - 2026-03-24
 - Added `KEEP_EMPTY_DIRS` option to preserve empty directories after moving files. [Issue #55](https://github.com/monstermuffin/mergerfs-cache-mover/issues/60)
 - Changed README.md to instruct users to use a venv due to PEP 668 enforcement.
