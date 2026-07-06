@@ -51,6 +51,7 @@ Copy `config.example.yml` to `config.yml` and set up your `config.yml` with the 
 - `INSTANCE_ID`: Optional unique identifier for running multiple instances (default none)
 - `EXCLUDED_DIRS`: Directories to exclude from cache moving operations (see [Excluded Directories](#excluded-directories) for details)
 - `KEEP_EMPTY_DIRS`: Preserve empty directories after moving files (default false)
+- `SKIP_HARDLINKED_FILES`: Skip any file whose link count is greater than 1, leaving it on cache until it becomes the sole remaining hard link (default false)
 
 > [!WARNING]  
 > This script must be run as root (using sudo) for the following reasons:
@@ -115,6 +116,7 @@ All configuration options can be set via environment variables:
 - `NOTIFY_THRESHOLD`: Notify on no action (default false)
 - `INSTANCE_ID`: Optional unique identifier for running multiple instances (default none)
 - `KEEP_EMPTY_DIRS`: Preserve empty directories after moving files (default false)
+- `SKIP_HARDLINKED_FILES`: Skip any file whose link count is greater than 1 (default false)
 
 ### Using Config File
 You can optionally mount a `config.yml` into the container as so:
@@ -451,6 +453,23 @@ For this to work in Docker, you must mount both the mergerfs pools AND the under
 
 > [!NOTE]  
 > Hardlinks are preserved within each move operation. If hardlinked files are moved in separate runs of the script, their hardlink relationship cannot be preserved.
+
+### Skipping Hardlinked Files
+
+If you use a workflow where hardlinked media files coexist on the cache, you may want to prevent the mover from touching any file that still has active hardlinks. Enable `SKIP_HARDLINKED_FILES` to achieve this:
+
+```yaml
+Settings:
+  SKIP_HARDLINKED_FILES: true
+```
+
+Or via environment variable:
+
+```
+SKIP_HARDLINKED_FILES=true
+```
+
+When enabled, any file with a link count greater than 1 (`nlink > 1`) is skipped entirely. Once seeding finishes and the torrent client removes its copy, the file's link count drops to 1 and it becomes eligible to move on the next run. This prevents data duplication on the backing pool while a torrent is still seeding. This fixes [Issue #75](https://github.com/monstermuffin/mergerfs-cache-mover/issues/75).
 
 ### Symlink Support
 The script provides support for symbolic links (symlinks), handling both absolute and relative paths:

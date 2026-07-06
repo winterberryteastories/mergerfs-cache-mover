@@ -30,6 +30,7 @@ DEFAULT_CONFIG = {
         'INSTANCE_ID': None,
         'LOG_LEVEL': 'INFO',
         'KEEP_EMPTY_DIRS': False,
+        'SKIP_HARDLINKED_FILES': False,
     }
 }
 
@@ -93,6 +94,7 @@ def load_config(config_path=None):
         'INSTANCE_ID': ('Settings', 'INSTANCE_ID', str),
         'LOG_LEVEL': ('Settings', 'LOG_LEVEL', str),
         'KEEP_EMPTY_DIRS': ('Settings', 'KEEP_EMPTY_DIRS', _parse_bool),
+        'SKIP_HARDLINKED_FILES': ('Settings', 'SKIP_HARDLINKED_FILES', _parse_bool),
     }
 
     for env_var, (section, key, *convert) in env_mappings.items():
