@@ -1,0 +1,58 @@
+name: Sync with upstream
+
+# Opens (or updates) a pull request that brings this fork's `main` up to date
+# with upstream monstermuffin/mergerfs-cache-mover. Runs weekly and on demand.
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write        # push the sync branch
+  pull-requests: write   # open the PR
+
+env:
+  UPSTREAM: https://github.com/monstermuffin/mergerfs-cache-mover.git
+  SYNC_BRANCH: sync/upstream
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # To make the sync PR trigger other workflows (e.g. the docker build
+          # checks), create a PAT with `repo` + `workflow` scopes, add it as a
+          # secret, and uncomment the next line:
+          # token: ${{ secrets.SYNC_PAT }}
+
+      - name: Check for upstream changes
+        id: check
+        run: |
+          git remote add upstream "$UPSTREAM"
+          git fetch upstream main
+          if [ -z "$(git log origin/main..upstream/main --oneline)" ]; then
+            echo "Fork is already up to date with upstream."
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push sync branch and open/update PR
+        if: steps.check.outputs.changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git branch -f "$SYNC_BRANCH" upstream/main
+          git push --force origin "$SYNC_BRANCH"
+
+          if gh pr view "$SYNC_BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            echo "Existing sync PR updated with the latest upstream commits."
+          else
+            gh pr create \
+              --base main \
+              --head "$SYNC_BRANCH" \
+              --title "⬆️ Sync with upstream (monstermuffin/mergerfs-cache-mover)" \
+              --body "Automated sync with upstream \`main\`. Review and merge to bring this fork up to date. Resolve any conflicts here if \`main\` has diverged."
+          fi
