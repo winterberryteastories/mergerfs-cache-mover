@@ -40,6 +40,37 @@ def is_excluded(path, excluded_dirs):
     
     return False
 
+def resolve_search_roots(cache_path, search_dirs):
+    """Resolve the roots to scan for files.
+
+    Returns [cache_path] when SEARCH_DIRS is empty (scan everything).
+    Otherwise returns each configured directory resolved relative to
+    CACHE_PATH, skipping (with a warning) any that don't exist.
+    """
+    if not search_dirs:
+        return [cache_path]
+
+    resolved = []
+    for entry in search_dirs:
+        relative = os.path.normpath(entry).lstrip(os.sep)
+        root = os.path.normpath(os.path.join(cache_path, relative))
+        if os.path.isdir(root):
+            resolved.append(root)
+        else:
+            logging.warning(f"SEARCH_DIRS entry not found, skipping: {root}")
+
+    # Drop duplicates and any root nested within another kept root so the walk
+    # visits each file once. Sorting ensures a parent is seen before its
+    # children, so the child (prefixed by "<parent>/") is pruned.
+    roots = []
+    for root in sorted(set(resolved)):
+        if any(root == kept or root.startswith(kept + os.sep) for kept in roots):
+            logging.debug(f"SEARCH_DIRS entry {root} is covered by another root, skipping")
+            continue
+        roots.append(root)
+
+    return roots
+
 def get_file_inode(path):
     try:
         return os.stat(path).st_ino
@@ -47,7 +78,57 @@ def get_file_inode(path):
         logging.warning(f"Error getting inode for {path}: {e}")
         return None
 
-def get_hardlink_groups(files):
+def collect_hardlink_paths(cache_path, excluded_dirs, hardlink_groups, search_roots):
+    """Extend hardlink groups with siblings that live outside the search roots.
+
+    hardlink_groups maps inode -> paths already found inside the searched roots
+    by the primary walk. A hardlinked file there may have siblings elsewhere on
+    the cache that must move with it to preserve the link, so we walk the parts
+    of the cache the primary scan did not cover - the searched roots are pruned
+    since they were already scanned. Members inside EXCLUDED_DIRS are skipped,
+    leaving them pinned on the cache.
+    """
+    wanted_inodes = set(hardlink_groups)
+    groups = defaultdict(list, {inode: list(paths) for inode, paths in hardlink_groups.items()})
+    if not wanted_inodes:
+        return groups
+
+    for root, dirs, files in os.walk(cache_path):
+        if is_excluded(root, excluded_dirs):
+            continue
+
+        # Skip the searched roots - the primary walk already collected them.
+        dirs[:] = [d for d in dirs
+                   if os.path.normpath(os.path.join(root, d)) not in search_roots]
+
+        for file in files:
+            file_path = os.path.join(root, file)
+            if os.path.islink(file_path):
+                continue
+
+            inode = get_file_inode(file_path)
+            if inode not in wanted_inodes:
+                continue
+
+            try:
+                if os.path.getsize(file_path) > 0:
+                    groups[inode].append(file_path)
+            except (OSError, IOError) as e:
+                logging.warning(f"Error processing hardlink for {file_path}: {e}")
+                continue
+
+    return groups
+
+def get_hardlink_groups(cache_path, excluded_dirs, files, search_roots):
+    """Group the given files by inode, keeping only true hardlink groups.
+
+    Files are grouped by inode (only those with a link count > 1). When the scan
+    is scoped to SEARCH_DIRS, a hardlinked file may have siblings outside the
+    searched dirs, so the whole cache is walked (via collect_hardlink_paths) to
+    gather the complete groups; siblings inside EXCLUDED_DIRS stay pinned on the
+    cache. Only groups with more than one movable link are returned - a file
+    whose every sibling is excluded is left for the caller to move normally.
+    """
     hardlink_groups = defaultdict(list)
     
     for file_path in files:
@@ -61,6 +142,11 @@ def get_hardlink_groups(files):
             logging.warning(f"Error processing hardlink for {file_path}: {e}")
             continue
     
+    if search_roots != [cache_path] and hardlink_groups:
+        hardlink_groups = collect_hardlink_paths(
+            cache_path, excluded_dirs, hardlink_groups, search_roots
+        )
+
     return {k: v for k, v in hardlink_groups.items() if len(v) > 1}
 
 def is_symlink(path):
@@ -75,35 +161,39 @@ def is_symlink(path):
 def gather_files_to_move(config):
     cache_path = config['Paths']['CACHE_PATH']
     excluded_dirs = config['Settings']['EXCLUDED_DIRS']
+    search_roots = resolve_search_roots(
+        cache_path, config['Settings'].get('SEARCH_DIRS', [])
+    )
     files_to_move = []
     symlinks = {}
 
-    for root, _, files in os.walk(cache_path):
-        if is_excluded(root, excluded_dirs):
-            continue
+    for search_root in search_roots:
+        for root, _, files in os.walk(search_root):
+            if is_excluded(root, excluded_dirs):
+                continue
             
-        for file in files:
-            file_path = os.path.join(root, file)
-            try:
-                is_link, target = is_symlink(file_path)
-                if is_link:
-                    symlinks[file_path] = target
-                    continue
-
-                if os.path.getsize(file_path) == 0:
-                    continue
-
-                if config['Settings'].get('SKIP_HARDLINKED_FILES', False):
-                    if os.stat(file_path).st_nlink > 1:
-                        logging.debug(f"Skipping hardlinked file (nlink > 1): {file_path}")
+            for file in files:
+                file_path = os.path.join(root, file)
+                try:
+                    is_link, target = is_symlink(file_path)
+                    if is_link:
+                        symlinks[file_path] = target
                         continue
 
-                files_to_move.append(file_path)
-            except (OSError, IOError) as e:
-                logging.warning(f"Error accessing file {file_path}: {e}")
-                continue
+                    if os.path.getsize(file_path) == 0:
+                        continue
 
-    hardlink_groups = get_hardlink_groups(files_to_move)
+                    if config['Settings'].get('SKIP_HARDLINKED_FILES', False):
+                        if os.stat(file_path).st_nlink > 1:
+                            logging.debug(f"Skipping hardlinked file (nlink > 1): {file_path}")
+                            continue
+
+                    files_to_move.append(file_path)
+                except (OSError, IOError) as e:
+                    logging.warning(f"Error accessing file {file_path}: {e}")
+                    continue
+
+    hardlink_groups = get_hardlink_groups(cache_path, excluded_dirs, files_to_move, search_roots)
     hardlinked_files = set(f for group in hardlink_groups.values() for f in group)
     regular_files = [f for f in files_to_move if f not in hardlinked_files]
 

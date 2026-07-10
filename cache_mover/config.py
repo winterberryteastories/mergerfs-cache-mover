@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
         'BACKUP_COUNT': 1,
         'UPDATE_BRANCH': 'main',
         'EXCLUDED_DIRS': HARDCODED_EXCLUSIONS,
+        'SEARCH_DIRS': [],
         'SCHEDULE': '0 3 * * *',
         'NOTIFICATIONS_ENABLED': False,
         'NOTIFICATION_URLS': [],
@@ -41,6 +42,15 @@ def _parse_bool(value):
 def _parse_excluded_dirs(value):
     dirs = [y.strip() for y in value.split(',')] if value else []
     return list(set(HARDCODED_EXCLUSIONS + dirs))
+
+def _parse_search_dirs(value):
+    if isinstance(value, list):
+        items = value
+    elif value is None:
+        items = []
+    else:
+        items = str(value).split(',')
+    return [item.strip() for item in items if str(item).strip()]
 
 def get_script_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -72,6 +82,11 @@ def load_config(config_path=None):
             settings_update = file_config.get('Settings', {})
             settings_update['EXCLUDED_DIRS'] = combined_exclusions
             
+            if 'SEARCH_DIRS' in settings_update:
+                settings_update['SEARCH_DIRS'] = _parse_search_dirs(
+                    settings_update['SEARCH_DIRS']
+                )
+
             if 'LOG_LEVEL' in settings_update:
                 settings_update['LOG_LEVEL'] = str(settings_update['LOG_LEVEL']).strip().upper()
             
@@ -88,6 +103,7 @@ def load_config(config_path=None):
         'BACKUP_COUNT': ('Settings', 'BACKUP_COUNT', int),
         'UPDATE_BRANCH': ('Settings', 'UPDATE_BRANCH', str),
         'EXCLUDED_DIRS': ('Settings', 'EXCLUDED_DIRS', _parse_excluded_dirs),
+        'SEARCH_DIRS': ('Settings', 'SEARCH_DIRS', _parse_search_dirs),
         'SCHEDULE': ('Settings', 'SCHEDULE', str),
         'NOTIFICATIONS_ENABLED': ('Settings', 'NOTIFICATIONS_ENABLED', _parse_bool),
         'NOTIFICATION_URLS': ('Settings', 'NOTIFICATION_URLS', lambda x: x.split(',')),

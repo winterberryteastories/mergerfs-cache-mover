@@ -56,6 +56,8 @@ class CleanupManager:
             if self.config['Settings'].get('KEEP_EMPTY_DIRS', False):
                 logging.info("KEEP_EMPTY_DIRS enabled, skipping empty directory cleanup")
             else:
+                # Cleanup runs cache-wide (respecting EXCLUDED_DIRS): moving a
+                # hardlink group can empty directories outside SEARCH_DIRS too.
                 removed_dirs = remove_empty_dirs(
                     self.cache_path,
                     self.config['Settings']['EXCLUDED_DIRS'],
