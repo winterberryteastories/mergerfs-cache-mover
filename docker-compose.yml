@@ -13,6 +13,7 @@ services:
       TARGET_PERCENTAGE: 25
       MAX_WORKERS: 8
       EXCLUDED_DIRS: temp,downloads,cache
+      SEARCH_DIRS: ""
       NOTIFICATIONS_ENABLED: True
       NOTIFY_THRESHOLD: True
       NOTIFICATION_URLS: "discord://webhook_id/webhook_token,slack://hooks/tokenA/tokenB/tokenC"

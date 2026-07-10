@@ -50,6 +50,7 @@ Copy `config.example.yml` to `config.yml` and set up your `config.yml` with the 
 - `NOTIFY_THRESHOLD`: Notify on no action (default false)
 - `INSTANCE_ID`: Optional unique identifier for running multiple instances (default none)
 - `EXCLUDED_DIRS`: Directories to exclude from cache moving operations (see [Excluded Directories](#excluded-directories) for details)
+- `SEARCH_DIRS`: Optional allowlist of directories (relative to `CACHE_PATH`) to scan for files to move (see [Search Directories](#search-directories) for details)
 - `KEEP_EMPTY_DIRS`: Preserve empty directories after moving files (default false)
 - `SKIP_HARDLINKED_FILES`: Skip any file whose link count is greater than 1, leaving it on cache until it becomes the sole remaining hard link (default false)
 
@@ -111,6 +112,7 @@ All configuration options can be set via environment variables:
 - `LOG_LEVEL`: Log level (default: INFO, examples: `DEBUG`, `INFO`, `WARNING`, `ERROR`).
 - `MAX_WORKERS`: Maximum parallel file moves (default: 8)
 - `EXCLUDED_DIRS`: Comma-separated list of directories to exclude (e.g., `"snapraid,media/downloads,media/torrents/audiobooks"`)
+- `SEARCH_DIRS`: Comma-separated allowlist of directories (relative to `CACHE_PATH`) to scan (e.g., `"media,appdata"`). Leave unset to scan everything.
 - `NOTIFICATIONS_ENABLED`: Enables notifications (default false)
 - `NOTIFICATION_URLS`: Apprise notification URLs
 - `NOTIFY_THRESHOLD`: Notify on no action (default false)
@@ -415,6 +417,32 @@ The following directories are always excluded (hardcoded):
 > [!NOTE]
 > User-defined exclusions are combined with the built-in exclusions. You don't need to re-specify the hardcoded ones.
 
+### Search Directories
+By default the script scans the entire `CACHE_PATH` for files to move. The optional `SEARCH_DIRS` setting flips this to an **allowlist**: when set, only the listed directories (resolved relative to `CACHE_PATH`) are scanned, and everything else on the cache is left untouched. This is the inverse of `EXCLUDED_DIRS` — use it when it's easier to name the few directories you *do* want moved than to exclude everything you don't.
+
+**Behavior:**
+- Leave it unset/empty to scan the whole `CACHE_PATH` (default, unchanged behavior).
+- Entries are paths relative to `CACHE_PATH` (e.g. `media`, `media/movies`). Duplicate or nested entries are de-duplicated (e.g. listing both `media` and `media/movies` just scans `media`).
+- `EXCLUDED_DIRS` still applies within the searched directories.
+- Entries that don't exist on disk are skipped with a warning.
+
+**Hardlinks are always kept intact.** Only files inside the searched directories trigger a move, but if such a file is hardlinked, the whole cache is walked to find its siblings so the entire group is moved together and the link is preserved on the backing storage — even siblings that live *outside* `SEARCH_DIRS`. The only exception is a sibling inside an `EXCLUDED_DIRS` directory: like all excluded files it stays pinned on the cache (which means the link to it is not preserved, consistent with normal `EXCLUDED_DIRS` behaviour). Because moving a group can empty directories anywhere on the cache, empty-directory cleanup runs cache-wide (respecting `EXCLUDED_DIRS`), not just within the searched directories.
+
+**Configuration Examples:**
+
+In `config.yml`:
+```yaml
+Settings:
+  SEARCH_DIRS:
+    - media                         # Scans /cache/media/* only
+    - appdata                       # ...and /cache/appdata/*
+```
+
+In Docker environment variables (comma-separated string):
+```yaml
+environment:
+  SEARCH_DIRS: "media,appdata"
+```
 
 ### Atomic File Moves
 As of v1.4, the script uses atomic file operations to prevent race conditions and ensure data integrity during moves.

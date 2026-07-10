@@ -25,6 +25,10 @@ Settings:
     # - media/downloads
     # - media/torrents/audiobooks
 
+  # SEARCH_DIRS: #Optional allowlist. If set, ONLY these directories (relative to CACHE_PATH) are scanned for files to move. Leave unset/empty to scan the entire CACHE_PATH. EXCLUDED_DIRS still applies within them. Note: hardlinks are always kept intact - if a searched file is hardlinked, its siblings elsewhere on the cache are moved with it (except siblings in EXCLUDED_DIRS, which stay). Read README.md for details.
+  #   - media
+  #   - appdata
+
   KEEP_EMPTY_DIRS: false #Set to true to preserve empty directories after moving files.
 
   # INSTANCE_ID: tier01  #For running multiple instances, read README.md for more info, leave blank if unsure.

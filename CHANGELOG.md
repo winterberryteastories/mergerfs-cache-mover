@@ -1,3 +1,6 @@
+### v1.4.4 - 2026-07-09
+- Added `SEARCH_DIRS` option: an optional allowlist of directories (relative to `CACHE_PATH`) to scan for files to move. When unset, the entire cache is scanned as before. Hardlinks are kept intact: if a searched file is hardlinked, the whole cache is walked to find its siblings so the group moves together (siblings in `EXCLUDED_DIRS` stay pinned on the cache).
+
 ### v1.4.3 - 2026-07-03
 - Added `SKIP_HARDLINKED_FILES` option to skip files with a link count greater than 1. [Issue #75](https://github.com/monstermuffin/mergerfs-cache-mover/issues/75).
 
