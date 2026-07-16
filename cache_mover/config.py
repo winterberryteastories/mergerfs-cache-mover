@@ -1,4 +1,5 @@
 import os
+import copy
 import yaml
 import logging
 
@@ -45,7 +46,7 @@ def get_script_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def load_config(config_path=None):
-    config = DEFAULT_CONFIG.copy()
+    config = copy.deepcopy(DEFAULT_CONFIG)
     
     if config_path:
         if not os.path.exists(config_path):
